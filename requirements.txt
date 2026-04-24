@@ -4,4 +4,4 @@ websockets
 python-dotenv
 httpx
 numpy
-fastembed
+fastembed==0.3.6
