@@ -120,7 +120,8 @@
                     }
                     // 如果 Gemini 說完了（turnComplete），我們可以選擇在此斷開或等一段時間
                     if (response.serverContent && response.serverContent.turnComplete) {
-                        addLog("對話回合結束。");
+                        addLog("對話回合結束，自動斷線。");
+                        setTimeout(() => { if (ws) ws.close(); }, 500);
                     }
                 };
 
@@ -181,6 +182,7 @@
         }
 
         async function playAudioChunk(base64Data) {
+            if (playAudioContext.state === 'suspended') await playAudioContext.resume();
             const binaryString = atob(base64Data);
             const bytes = new Uint8Array(binaryString.length);
             for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
