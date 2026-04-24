@@ -36,6 +36,8 @@ async def websocket_endpoint(client_ws: WebSocket):
                     response_text = await gemini_ws.recv()
                     response_data = json.loads(response_text)
                     logger.info(f"[gemini] keys: {list(response_data.keys())}")
+                    if "goAway" in response_data:
+                        logger.error(f"[gemini] goAway detail: {response_data['goAway']}")
 
                     if "toolCall" in response_data:
                         query = response_data["toolCall"]["functionCalls"][0]["args"]["query"]
