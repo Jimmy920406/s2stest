@@ -50,7 +50,11 @@ async def search_faq(query: str) -> str:
     query_vec = query_vec / np.linalg.norm(query_vec)
     similarities = faq_embeddings @ query_vec
     best_idx = int(np.argmax(similarities))
-    logger.info(f"[search] query={query}, similarity={similarities[best_idx]:.4f}")
+    best_score = float(similarities[best_idx])
+    logger.info(f"[search] query={query}, similarity={best_score:.4f}")
+
+    if best_score < 0.5:
+        return "資料庫中找不到相關資訊。"
     return faq_answers[best_idx]
 
 @app.websocket("/ws")

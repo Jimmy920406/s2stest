@@ -101,7 +101,7 @@
                             realtimeInputConfig: {
                                 automaticActivityDetection: { disabled: true }
                             },
-                            systemInstruction: { parts: [{ text: "你是一個嚴格的資料庫查詢語音助理。請簡短回答。" }] },
+                            systemInstruction: { parts: [{ text: "你是一個語音助理，只能根據 search_database 工具回傳的資料來回答。用最少的字數完整傳達答案，不重複、不補充、不解釋，直接說重點。如果工具回傳的資料與問題無關，或資料中沒有答案，請直接說「抱歉，我不知道」，不要自行推測。" }] },
                             tools: [{ function_declarations: [{ name: "search_database", description: "查詢資料庫資訊", parameters: { type: "OBJECT", properties: { query: { type: "STRING" } }, required: ["query"] } }] }]
                         }
                     }));
