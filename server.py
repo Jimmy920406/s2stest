@@ -1,11 +1,12 @@
 import os
 import json
 import csv
+import asyncio
 import logging
 import numpy as np
-import httpx
 import websockets
 from fastapi import FastAPI, WebSocket
+from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 
 logging.basicConfig(level=logging.INFO)
@@ -13,13 +14,13 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 app = FastAPI()
 
-# 啟動時載入 FAQ 資料
+# 啟動時載入 FAQ 資料與本地 embedding 模型
 faq_answers = []
 faq_embeddings = None
+embedding_model = SentenceTransformer("BAAI/bge-small-zh-v1.5")
 
 def load_faq():
     global faq_answers, faq_embeddings
@@ -38,16 +39,11 @@ def load_faq():
 load_faq()
 
 async def search_faq(query: str) -> str:
-    async with httpx.AsyncClient() as client:
-        res = await client.post(
-            "https://api.openai.com/v1/embeddings",
-            headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
-            json={"model": "text-embedding-3-small", "input": query},
-            timeout=10.0
-        )
-        query_vec = np.array(res.json()["data"][0]["embedding"], dtype=np.float32)
-
-    query_vec = query_vec / np.linalg.norm(query_vec)
+    loop = asyncio.get_event_loop()
+    query_vec = await loop.run_in_executor(
+        None, lambda: embedding_model.encode(query, normalize_embeddings=True)
+    )
+    query_vec = np.array(query_vec, dtype=np.float32)
     similarities = faq_embeddings @ query_vec
     best_idx = int(np.argmax(similarities))
     best_score = float(similarities[best_idx])
