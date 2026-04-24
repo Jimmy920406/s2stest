@@ -74,8 +74,8 @@
             
             // 告訴 Gemini 使用者說完了
             if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ realtimeInput: { activityEnd: {} } }));
                 addLog("停止錄音，等待回應...");
-                // 傳送一個空封包或結束標記（視 API 需求，通常停止傳送 mediaChunks 即可）
             }
         }
 
@@ -97,11 +97,15 @@
                                     }
                                 }
                             },
+                            realtimeInputConfig: {
+                                automaticActivityDetection: { disabled: true }
+                            },
                             systemInstruction: { parts: [{ text: "你是一個語音助理。請簡短回答。" }] }
                         }
                     }));
                     addLog("連線成功，傳送語音中...");
                     startMicStreaming();
+                    ws.send(JSON.stringify({ realtimeInput: { activityStart: {} } }));
                 };
 
                 ws.onmessage = async (event) => {
