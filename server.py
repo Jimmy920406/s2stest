@@ -56,9 +56,11 @@ async def websocket_endpoint(client_ws: WebSocket):
                         call_id = function_call.get("id", "")
                         query = function_call["args"]["query"]
 
+                        logger.info(f"[n8n] query: {query}")
                         async with httpx.AsyncClient() as client:
                             n8n_res = await client.post(N8N_URL, json={"query": query})
                             n8n_data = n8n_res.json() if n8n_res.text.strip() else {}
+                        logger.info(f"[n8n] response: {n8n_data}")
 
                         tool_response = {
                             "tool_response": {
