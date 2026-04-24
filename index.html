@@ -4,35 +4,46 @@
     <meta charset="UTF-8">
     <title>S2S 即時語音測試</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
-        button { padding: 15px; font-size: 16px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; width: 100%; margin-bottom: 20px; }
-        #log { background: #222; color: #0f0; padding: 15px; border-radius: 5px; height: 300px; overflow-y: auto; font-family: monospace; font-size: 14px; }
+        body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; background-color: #f8f9fa; }
+        button { padding: 15px; font-size: 16px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; width: 100%; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        #log { background: #212529; color: #00ff00; padding: 15px; border-radius: 5px; height: 350px; overflow-y: auto; font-family: monospace; font-size: 14px; line-height: 1.5; }
+        .highlight { color: #ffc107; }
     </style>
 </head>
 <body>
     <h2>S2S 測試環境 (s2stest)</h2>
-    <button id="startBtn">連線並開始測試</button>
+    <p>點擊按鈕後，請試著問：「資料庫裡有什麼資訊？」</p>
+    <button id="startBtn">連線並開始測試 (開啟麥克風與喇叭)</button>
     <div id="log">系統日誌：等待連線...<br></div>
 
     <script>
         const logArea = document.getElementById('log');
         function addLog(msg) { logArea.innerHTML += `> ${msg}<br>`; logArea.scrollTop = logArea.scrollHeight; }
 
-        // 等到 Render 部署好，把這裡的 REPLACE_ME 換成 Render 的網址
+        // 🚨 這裡要維持你 Render 的網址 🚨
         const BACKEND_WS_URL = "wss://s2stest.onrender.com/ws"; 
+
+        // 語音播放相關變數
+        let playAudioContext;
+        let nextPlayTime = 0;
 
         document.getElementById('startBtn').onclick = async () => {
             document.getElementById('startBtn').disabled = true;
             addLog("連線至中繼伺服器中...");
 
+            // 初始化播放器 (必須在使用者點擊按鈕時立刻初始化，才能突破瀏覽器的自動播放限制)
+            initAudioPlayer();
+
             const ws = new WebSocket(BACKEND_WS_URL);
 
             ws.onopen = () => {
-                addLog("✅ 已成功連線！請允許麥克風權限並開始測試。");
+                addLog("<span class='highlight'>✅ 已成功連線！請開始說話。</span>");
+                // 告訴 Gemini 我們要用語音互動，並且帶上工具
                 ws.send(JSON.stringify({
                     setup: {
                         model: "models/gemini-2.0-flash-exp",
-                        tools: [{ function_declarations: [{ name: "search_database", description: "查詢資料庫資訊", parameters: { type: "OBJECT", properties: { query: { type: "STRING" } }, required: ["query"] } }] }]
+                        tools: [{ function_declarations: [{ name: "search_database", description: "查詢資料庫或馬拉松相關資訊", parameters: { type: "OBJECT", properties: { query: { type: "STRING" } }, required: ["query"] } }] }]
                     }
                 }));
                 startRecording(ws);
@@ -40,24 +51,87 @@
 
             ws.onmessage = async (event) => {
                 const response = JSON.parse(event.data);
+                
+                // 1. 攔截工具呼叫 (RAG)
                 if (response.toolCall) {
-                    addLog(`🔍 觸發資料庫檢索中...`);
+                    addLog(`🔍 <span class='highlight'>觸發資料庫檢索中...</span>`);
                 }
+                
+                // 2. 接收 AI 的語音回覆並播放
                 if (response.serverContent && response.serverContent.modelDraft) {
-                    addLog("🔊 接收到 AI 語音回應...");
+                    const parts = response.serverContent.modelDraft.parts;
+                    if (parts) {
+                        for (const part of parts) {
+                            // 如果回傳的片段包含聲音資料
+                            if (part.inlineData && part.inlineData.data) {
+                                addLog("🔊 正在播放 AI 語音...");
+                                playAudioChunk(part.inlineData.data);
+                            }
+                        }
+                    }
                 }
+            };
+            
+            ws.onclose = () => {
+                addLog("❌ 連線已斷開。請重新整理網頁。");
+                document.getElementById('startBtn').disabled = false;
             };
         };
 
+        // ================= 播放器核心邏輯 =================
+        function initAudioPlayer() {
+            if (!playAudioContext) {
+                // Gemini 回傳的音訊取樣率通常為 24kHz
+                playAudioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+            }
+        }
+
+        async function playAudioChunk(base64Data) {
+            // 1. Base64 轉回二進位 PCM 資料
+            const binaryString = atob(base64Data);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            
+            // 2. PCM 16-bit 轉成 Float32 (AudioContext 需要的格式)
+            const pcm16 = new Int16Array(bytes.buffer);
+            const float32 = new Float32Array(pcm16.length);
+            for (let i = 0; i < pcm16.length; i++) {
+                float32[i] = pcm16[i] / 32768.0;
+            }
+
+            // 3. 建立音訊緩衝區
+            const audioBuffer = playAudioContext.createBuffer(1, float32.length, 24000);
+            audioBuffer.getChannelData(0).set(float32);
+
+            // 4. 排程播放 (確保聲音片段不會重疊，像說話一樣順暢)
+            const source = playAudioContext.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(playAudioContext.destination);
+
+            const currentTime = playAudioContext.currentTime;
+            if (nextPlayTime < currentTime) {
+                nextPlayTime = currentTime; // 如果已經播完，就從現在開始播
+            }
+            source.start(nextPlayTime);
+            nextPlayTime += audioBuffer.duration; // 加上這段聲音的長度，作為下一段聲音的起點
+        }
+
+        // ================= 錄音核心邏輯 =================
         async function startRecording(ws) {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            // 麥克風取樣率設為 16kHz (Gemini 輸入要求)
             const audioCtx = new AudioContext({ sampleRate: 16000 });
             const source = audioCtx.createMediaStreamSource(stream);
             const processor = audioCtx.createScriptProcessor(4096, 1, 1);
             source.connect(processor);
             processor.connect(audioCtx.destination);
+            
             processor.onaudioprocess = (e) => {
                 const inputData = e.inputBuffer.getChannelData(0);
+                // 將 Float32 轉成 PCM 16-bit，再轉成 Base64 送出
                 const pcmData = btoa(String.fromCharCode(...new Uint8Array(new Int16Array(inputData.map(v => v * 32767)).buffer)));
                 if(ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ real_time_input: { media_chunks: [{ data: pcmData, mime_type: "audio/pcm" }] } }));
