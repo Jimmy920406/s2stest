@@ -15,7 +15,7 @@ app = FastAPI()
 async def websocket_endpoint(client_ws: WebSocket):
     await client_ws.accept()
     
-    gemini_url = f"wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BiDiGenerateContent?key={GEMINI_API_KEY}"
+    gemini_url = f"wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key={GEMINI_API_KEY}"
     
     async with websockets.connect(gemini_url) as gemini_ws:
         async def receive_from_client():
