@@ -4,4 +4,4 @@ websockets
 python-dotenv
 httpx
 numpy
-sentence-transformers
+fastembed

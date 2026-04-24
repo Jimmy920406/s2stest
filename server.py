@@ -6,7 +6,7 @@ import logging
 import numpy as np
 import websockets
 from fastapi import FastAPI, WebSocket
-from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding
 from dotenv import load_dotenv
 
 logging.basicConfig(level=logging.INFO)
@@ -20,7 +20,7 @@ app = FastAPI()
 # 啟動時載入 FAQ 資料與本地 embedding 模型
 faq_answers = []
 faq_embeddings = None
-embedding_model = SentenceTransformer("BAAI/bge-small-zh-v1.5")
+embedding_model = TextEmbedding("BAAI/bge-small-zh-v1.5")
 
 def load_faq():
     global faq_answers, faq_embeddings
@@ -41,9 +41,10 @@ load_faq()
 async def search_faq(query: str) -> str:
     loop = asyncio.get_event_loop()
     query_vec = await loop.run_in_executor(
-        None, lambda: embedding_model.encode(query, normalize_embeddings=True)
+        None, lambda: list(embedding_model.embed([query]))[0]
     )
     query_vec = np.array(query_vec, dtype=np.float32)
+    query_vec = query_vec / np.linalg.norm(query_vec)
     similarities = faq_embeddings @ query_vec
     best_idx = int(np.argmax(similarities))
     best_score = float(similarities[best_idx])

@@ -1,6 +1,6 @@
 import csv
 import json
-from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding
 
 INPUT_CSV = "faq_rows.csv"
 OUTPUT_CSV = "faq_rows_new.csv"
@@ -9,7 +9,7 @@ MODEL_NAME = "BAAI/bge-small-zh-v1.5"
 
 
 def main():
-    model = SentenceTransformer(MODEL_NAME)
+    model = TextEmbedding(MODEL_NAME)
 
     rows = []
     with open(INPUT_CSV, "r", encoding="utf-8") as f:
@@ -26,7 +26,7 @@ def main():
         questions = [row["question"] for row in batch]
         print(f"處理 {i+1}~{min(i+BATCH_SIZE, total)}/{total}...")
 
-        embeddings = model.encode(questions, normalize_embeddings=True, batch_size=BATCH_SIZE)
+        embeddings = list(model.embed(questions))
 
         for row, emb in zip(batch, embeddings):
             row["embedding"] = json.dumps(emb.tolist())
