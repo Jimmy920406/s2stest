@@ -87,7 +87,7 @@
                     updateStatus(true);
                     // 1. 送出 Setup
                     ws.send(JSON.stringify({
-                        config: {
+                        setup: {
                             model: "models/gemini-3.1-flash-live-preview",
                             responseModalities: ["AUDIO"],
                             systemInstruction: { parts: [{ text: "你是一個嚴格的資料庫查詢語音助理。請簡短回答。" }] },
