@@ -43,10 +43,19 @@
                 ws.send(JSON.stringify({
                     setup: {
                         model: "models/gemini-2.0-flash-exp",
-                        tools: [{ function_declarations: [{ name: "search_database", description: "查詢資料庫或馬拉松相關資訊", parameters: { type: "OBJECT", properties: { query: { type: "STRING" } }, required: ["query"] } }] }]
+                        systemInstruction: {
+                            parts: [{
+                                text: `你是一個嚴格的資料庫查詢語音助理。
+                                    你的最高指導原則如下：
+                                    1. 使用者問你的任何具體問題，你都【必須】優先呼叫 search_database 工具來查詢。
+                                    2. 你【絕對不可以】使用你自帶的內部知識庫來回答問題。
+                                    3. 如果 search_database 傳回的資料中找不到答案，或者資料庫說沒有資料，你【必須】回答：「抱歉，目前資料庫中沒有相關資訊」，絕對不能自己編造答案。
+                                    4. 你的回答必須簡短、口語化，並且 100% 忠於資料庫提供的內容。`
+                            }]
+                        },
+                        tools: [{ function_declarations: [{ name: "search_database", description: "查詢資料庫或馬拉松相關資訊", parameters: { type: "OBJECT", properties: { query: { type: "STRING", description: "用來搜尋資料庫的關鍵字" } }, required: ["query"] } }] }]
                     }
                 }));
-                startRecording(ws);
             };
 
             ws.onmessage = async (event) => {
