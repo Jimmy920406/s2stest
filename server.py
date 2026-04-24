@@ -42,7 +42,7 @@ async def websocket_endpoint(client_ws: WebSocket):
 
                         async with httpx.AsyncClient() as client:
                             n8n_res = await client.post(N8N_URL, json={"query": query})
-                            n8n_data = n8n_res.json()
+                            n8n_data = n8n_res.json() if n8n_res.text.strip() else {}
 
                         tool_response = {
                             "tool_response": {
