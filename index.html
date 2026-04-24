@@ -171,7 +171,7 @@
             }
         }
 
-        // ================= 麥克風擷取邏輯 =================
+        // ================= 麥克風擷取邏輯 (修復版) =================
         async function startMicrophone() {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const audioCtx = new AudioContext({ sampleRate: 16000 });
@@ -181,13 +181,36 @@
             processor.connect(audioCtx.destination);
             
             processor.onaudioprocess = (e) => {
-                // 🛑 核心防護：如果按鈕沒被按住，就直接 return，一滴聲音都不傳出去！
+                // 如果沒有按住按鈕，就不處理聲音
                 if (!isRecording) return; 
 
                 const inputData = e.inputBuffer.getChannelData(0);
-                const pcmData = btoa(String.fromCharCode(...new Uint8Array(new Int16Array(inputData.map(v => v * 32767)).buffer)));
-                if(ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ real_time_input: { media_chunks: [{ data: pcmData, mime_type: "audio/pcm" }] } }));
+                
+                // 1. 安全地將浮點數音訊轉換為 16-bit PCM
+                const pcm16 = new Int16Array(inputData.length);
+                for (let i = 0; i < inputData.length; i++) {
+                    // 加入 Math.max/min 防止爆音破音
+                    pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
+                }
+                
+                // 2. 安全地轉換為 Base64 (避免 Call Stack Exceeded 錯誤)
+                let binary = '';
+                const bytes = new Uint8Array(pcm16.buffer);
+                for (let i = 0; i < bytes.byteLength; i++) {
+                    binary += String.fromCharCode(bytes[i]);
+                }
+                const base64Data = window.btoa(binary);
+
+                // 3. 傳送給 Gemini (🚨修正點：嚴格使用 realtimeInput, mediaChunks, mimeType)
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ 
+                        realtimeInput: { 
+                            mediaChunks: [{ 
+                                mimeType: "audio/pcm;rate=16000", 
+                                data: base64Data 
+                            }] 
+                        } 
+                    }));
                 }
             };
         }
