@@ -52,7 +52,9 @@ async def websocket_endpoint(client_ws: WebSocket):
                                 logger.info(f"[gemini] part keys: {list(p.keys())}")
 
                     if "toolCall" in response_data:
-                        query = response_data["toolCall"]["functionCalls"][0]["args"]["query"]
+                        function_call = response_data["toolCall"]["functionCalls"][0]
+                        call_id = function_call.get("id", "")
+                        query = function_call["args"]["query"]
 
                         async with httpx.AsyncClient() as client:
                             n8n_res = await client.post(N8N_URL, json={"query": query})
@@ -61,6 +63,7 @@ async def websocket_endpoint(client_ws: WebSocket):
                         tool_response = {
                             "tool_response": {
                                 "function_responses": [{
+                                    "id": call_id,
                                     "name": "search_database",
                                     "response": {"output": n8n_data.get("answer", "")}
                                 }]
