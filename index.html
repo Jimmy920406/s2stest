@@ -88,7 +88,7 @@
                     // 1. 送出 Setup
                     ws.send(JSON.stringify({
                         setup: {
-                            model: "models/gemini-2.0-flash-live-preview-04-09",
+                            model: "models/gemini-2.0-flash-live-001",
                             systemInstruction: { parts: [{ text: "你是一個嚴格的資料庫查詢語音助理。請簡短回答。" }] },
                             tools: [{ function_declarations: [{ name: "search_database", description: "查詢資料庫資訊", parameters: { type: "OBJECT", properties: { query: { type: "STRING" } }, required: ["query"] } }] }]
                         }
