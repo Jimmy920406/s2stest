@@ -33,7 +33,11 @@ async def websocket_endpoint(client_ws: WebSocket):
         async def receive_from_gemini():
             try:
                 while True:
-                    response_text = await gemini_ws.recv()
+                    raw = await gemini_ws.recv()
+                    if isinstance(raw, bytes):
+                        response_text = raw.decode('utf-8')
+                    else:
+                        response_text = raw
                     response_data = json.loads(response_text)
                     logger.info(f"[gemini] keys: {list(response_data.keys())}")
                     if "goAway" in response_data:
