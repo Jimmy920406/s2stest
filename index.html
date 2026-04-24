@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>S2S 即時語音測試</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+        button { padding: 15px; font-size: 16px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; width: 100%; margin-bottom: 20px; }
+        #log { background: #222; color: #0f0; padding: 15px; border-radius: 5px; height: 300px; overflow-y: auto; font-family: monospace; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <h2>S2S 測試環境 (s2stest)</h2>
+    <button id="startBtn">連線並開始測試</button>
+    <div id="log">系統日誌：等待連線...<br></div>
+
+    <script>
+        const logArea = document.getElementById('log');
+        function addLog(msg) { logArea.innerHTML += `> ${msg}<br>`; logArea.scrollTop = logArea.scrollHeight; }
+
+        // 等到 Render 部署好，把這裡的 REPLACE_ME 換成 Render 的網址
+        const BACKEND_WS_URL = "wss://REPLACE_ME/ws"; 
+
+        document.getElementById('startBtn').onclick = async () => {
+            document.getElementById('startBtn').disabled = true;
+            addLog("連線至中繼伺服器中...");
+
+            const ws = new WebSocket(BACKEND_WS_URL);
+
+            ws.onopen = () => {
+                addLog("✅ 已成功連線！請允許麥克風權限並開始測試。");
+                ws.send(JSON.stringify({
+                    setup: {
+                        model: "models/gemini-2.0-flash-exp",
+                        tools: [{ function_declarations: [{ name: "search_database", description: "查詢資料庫資訊", parameters: { type: "OBJECT", properties: { query: { type: "STRING" } }, required: ["query"] } }] }]
+                    }
+                }));
+                startRecording(ws);
+            };
+
+            ws.onmessage = async (event) => {
+                const response = JSON.parse(event.data);
+                if (response.toolCall) {
+                    addLog(`🔍 觸發資料庫檢索中...`);
+                }
+                if (response.serverContent && response.serverContent.modelDraft) {
+                    addLog("🔊 接收到 AI 語音回應...");
+                }
+            };
+        };
+
+        async function startRecording(ws) {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const audioCtx = new AudioContext({ sampleRate: 16000 });
+            const source = audioCtx.createMediaStreamSource(stream);
+            const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+            source.connect(processor);
+            processor.connect(audioCtx.destination);
+            processor.onaudioprocess = (e) => {
+                const inputData = e.inputBuffer.getChannelData(0);
+                const pcmData = btoa(String.fromCharCode(...new Uint8Array(new Int16Array(inputData.map(v => v * 32767)).buffer)));
+                if(ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ real_time_input: { media_chunks: [{ data: pcmData, mime_type: "audio/pcm" }] } }));
+                }
+            };
+        }
+    </script>
+</body>
+</html>
