@@ -110,8 +110,8 @@
 
                 ws.onmessage = async (event) => {
                     const response = JSON.parse(event.data);
-                    if (response.serverContent && response.serverContent.modelDraft) {
-                        const parts = response.serverContent.modelDraft.parts;
+                    if (response.serverContent && response.serverContent.modelTurn) {
+                        const parts = response.serverContent.modelTurn.parts;
                         for (const part of parts) {
                             if (part.inlineData && part.inlineData.data) {
                                 playAudioChunk(part.inlineData.data);
