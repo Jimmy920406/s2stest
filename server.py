@@ -38,6 +38,14 @@ async def websocket_endpoint(client_ws: WebSocket):
                     logger.info(f"[gemini] keys: {list(response_data.keys())}")
                     if "goAway" in response_data:
                         logger.error(f"[gemini] goAway detail: {response_data['goAway']}")
+                    if "serverContent" in response_data:
+                        sc = response_data["serverContent"]
+                        logger.info(f"[gemini] serverContent keys: {list(sc.keys())}")
+                        turn = sc.get("modelTurn") or sc.get("modelDraft")
+                        if turn:
+                            parts = turn.get("parts", [])
+                            for p in parts:
+                                logger.info(f"[gemini] part keys: {list(p.keys())}")
 
                     if "toolCall" in response_data:
                         query = response_data["toolCall"]["functionCalls"][0]["args"]["query"]
