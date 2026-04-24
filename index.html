@@ -19,7 +19,7 @@
         function addLog(msg) { logArea.innerHTML += `> ${msg}<br>`; logArea.scrollTop = logArea.scrollHeight; }
 
         // 等到 Render 部署好，把這裡的 REPLACE_ME 換成 Render 的網址
-        const BACKEND_WS_URL = "wss://REPLACE_ME/ws"; 
+        const BACKEND_WS_URL = "wss://s2stest.onrender.com/ws"; 
 
         document.getElementById('startBtn').onclick = async () => {
             document.getElementById('startBtn').disabled = true;
