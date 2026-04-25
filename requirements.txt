@@ -4,4 +4,4 @@ websockets
 python-dotenv
 httpx
 numpy
-fastembed==0.3.6
+openai

@@ -1,15 +1,19 @@
 import csv
 import json
-from fastembed import TextEmbedding
+import os
+from openai import OpenAI
+from dotenv import load_dotenv
+
+load_dotenv()
 
 INPUT_CSV = "faq_rows.csv"
 OUTPUT_CSV = "faq_rows_new.csv"
 BATCH_SIZE = 64
-MODEL_NAME = "BAAI/bge-small-zh-v1.5"
+MODEL_NAME = "text-embedding-3-small"
 
 
 def main():
-    model = TextEmbedding(MODEL_NAME)
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
     rows = []
     with open(INPUT_CSV, "r", encoding="utf-8") as f:
@@ -18,7 +22,7 @@ def main():
         for row in reader:
             rows.append(row)
 
-    print(f"總共 {len(rows)} 筆，使用本地模型 {MODEL_NAME} 生成 embedding...")
+    print(f"總共 {len(rows)} 筆，使用 OpenAI {MODEL_NAME} 生成 embedding...")
     total = len(rows)
 
     for i in range(0, total, BATCH_SIZE):
@@ -26,10 +30,11 @@ def main():
         questions = [row["question"] for row in batch]
         print(f"處理 {i+1}~{min(i+BATCH_SIZE, total)}/{total}...")
 
-        embeddings = list(model.embed(questions))
+        response = client.embeddings.create(model=MODEL_NAME, input=questions)
+        embeddings = [d.embedding for d in response.data]
 
         for row, emb in zip(batch, embeddings):
-            row["embedding"] = json.dumps(emb.tolist())
+            row["embedding"] = json.dumps(emb)
 
         # 每批次寫入 CSV，避免中途失敗遺失進度
         with open(OUTPUT_CSV, "w", encoding="utf-8", newline="") as f:
