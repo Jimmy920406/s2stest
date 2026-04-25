@@ -1,12 +1,14 @@
 import os
 import json
-import csv
+import time
 import asyncio
 import logging
-import numpy as np
+import asyncpg
 import websockets
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket
 from openai import AsyncOpenAI
+from pgvector.asyncpg import register_vector
 from dotenv import load_dotenv
 
 logging.basicConfig(level=logging.INFO)
@@ -15,46 +17,67 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL")
 EMBEDDING_MODEL = "text-embedding-3-small"
+SIMILARITY_THRESHOLD = 0.7
 
-app = FastAPI()
-
-# 啟動時載入 FAQ 資料與 OpenAI client
-faq_answers = []
-faq_embeddings = None
 openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+db_pool: asyncpg.Pool | None = None
 
-def load_faq():
-    global faq_answers, faq_embeddings
-    csv_path = os.path.join(os.path.dirname(__file__), "faq_rows.csv")
-    embeddings = []
-    with open(csv_path, "r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            faq_answers.append(row["answer"])
-            embeddings.append(json.loads(row["embedding"]))
-    matrix = np.array(embeddings, dtype=np.float32)
-    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
-    faq_embeddings = matrix / norms
-    logger.info(f"[faq] 載入 {len(faq_answers)} 筆資料")
 
-load_faq()
+async def init_connection(conn):
+    await register_vector(conn)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global db_pool
+    db_pool = await asyncpg.create_pool(
+        SUPABASE_DB_URL,
+        min_size=1,
+        max_size=5,
+        init=init_connection,
+        statement_cache_size=0,  # transaction pooler 不支援 prepared statements
+    )
+    logger.info("[db] connection pool ready")
+    yield
+    await db_pool.close()
+
+
+app = FastAPI(lifespan=lifespan)
+
 
 async def search_faq(query: str) -> str:
+    t0 = time.perf_counter()
     response = await openai_client.embeddings.create(
         model=EMBEDDING_MODEL,
         input=query,
     )
-    query_vec = np.array(response.data[0].embedding, dtype=np.float32)
-    query_vec = query_vec / np.linalg.norm(query_vec)
-    similarities = faq_embeddings @ query_vec
-    best_idx = int(np.argmax(similarities))
-    best_score = float(similarities[best_idx])
-    logger.info(f"[search] query={query}, similarity={best_score:.4f}")
+    query_vec = response.data[0].embedding
+    t1 = time.perf_counter()
 
-    if best_score < 0.5:
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            select answer, 1 - (embedding <=> $1::vector) as similarity
+            from faq
+            order by embedding <=> $1::vector
+            limit 1
+            """,
+            query_vec,
+        )
+    t2 = time.perf_counter()
+
+    similarity = float(row["similarity"])
+    logger.info(
+        f"[search] query={query} sim={similarity:.4f} "
+        f"embed={(t1-t0)*1000:.0f}ms db={(t2-t1)*1000:.0f}ms"
+    )
+
+    if similarity < SIMILARITY_THRESHOLD:
         return "資料庫中找不到相關資訊。"
-    return faq_answers[best_idx]
+    return row["answer"]
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(client_ws: WebSocket):
@@ -104,5 +127,4 @@ async def websocket_endpoint(client_ws: WebSocket):
             except Exception as e:
                 logger.error(f"[receive_from_gemini] error: {e}")
 
-        import asyncio
         await asyncio.gather(receive_from_client(), receive_from_gemini())
